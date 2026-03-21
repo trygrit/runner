@@ -6,6 +6,7 @@ on:
     branches:
     - main
     - releases/*
+    - '!releases/grit-*'  # Grit patched branches — release workflow handles these
     paths-ignore:
     - '**.md'
   pull_request:
