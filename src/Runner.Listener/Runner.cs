@@ -572,6 +572,26 @@ namespace GitHub.Runner.Listener
                                 {
                                     runOnceJobCompleted = true;
                                     Trace.Info("Job has finished at backend, the runner will exit since it is running under onetime use mode.");
+
+                                    // Delete the broker session BEFORE cancelling the message queue.
+                                    // This tells GitHub the runner is intentionally departing, not crashing.
+                                    // Without this, cancelling the message queue severs the broker TCP
+                                    // connection first, and GitHub's broker health monitor flags the runner
+                                    // as "lost communication" before its pipeline service has propagated the
+                                    // job completion — even though CompleteJobAsync already succeeded and
+                                    // GitHub acknowledged it (JobState: Online).
+                                    // See: https://github.com/actions/runner/issues/4309
+                                    Trace.Info("Deleting runner session before disconnecting from broker.");
+                                    try
+                                    {
+                                        await _listener.DeleteSessionAsync();
+                                        skipSessionDeletion = true;
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Trace.Info($"Failed to delete session before broker disconnect, will retry in finally block. {ex.Message}");
+                                    }
+
                                     Trace.Info("Stop message queue looping.");
                                     messageQueueLoopTokenSource.Cancel();
                                     try
